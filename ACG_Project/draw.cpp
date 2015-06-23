@@ -1,6 +1,7 @@
 #include "draw.h"
 #include <iostream>
 #include <cmath>
+#include <ctime>
 
 using namespace std;
 
@@ -14,6 +15,7 @@ bool init(Camera &camera, Viewport &viewport, Light &light, vector<Sphere> &sphe
 	Material material;
 	vec3 position;
 	float radius;
+	srand(time(NULL));
 
 	ifstream fin("input.txt");
 	if (!fin)
@@ -280,6 +282,26 @@ Intersection rayTracer(vec3 startPosition, vec3 ray, Light light, vector<Sphere>
 	return vec3(1, 1, 1);
 }*/
 
+vec3 sampling(Light light, Intersection intersection, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
+{
+	vec3 ray = -intersection.normal, rColor = intersection.material.color;
+	Intersection sample;
+	float theta, phi;
+	for (int i = 0; i < 2; i++)
+	{
+		theta = rand() % 30;
+		phi = rand() % 360;
+		ray = rotation3D(planes[intersection.index].vertices[1] - planes[intersection.index].vertices[0], theta) * ray;
+		ray = rotation3D(intersection.normal, phi) * ray;
+		sample = rayTracer(intersection.position, ray, light, spheres, triangles, planes);
+		if (sample.type == 'l' && sample.t != numeric_limits<float>::max())
+		{
+			rColor = prod(rColor, sample.material.color * cos(theta / 180));
+		}
+	}
+	return rColor;
+}
+
 vec3 draw(Camera &camera, vec3 ray, Light light, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
 {
 	Intersection intersection;
@@ -287,8 +309,12 @@ vec3 draw(Camera &camera, vec3 ray, Light light, vector<Sphere> &spheres, vector
 	intersection = rayTracer(camera.position, ray, light, spheres, triangles, planes);
 	if (intersection.t != numeric_limits<float>::max())
 	{
-		//if (shadow(intersection[i], light, spheres, triangles, planes).material.color == vec3(0.0, 0.0, 0.0))
+		//if (shadow(intersection[i], light, spheres, triangles, planes).material.color == vec3(0.0, 0.0, 0.0));
 		rColor = intersection.material.color;
+		if (intersection.type == 'p')
+		{
+			rColor = sampling(light, intersection, spheres, triangles, planes);
+		}
 	}
 	
 	return rColor;
@@ -332,7 +358,7 @@ void output(Viewport &viewport)
 {
 	ColorImage image;
 	Pixel p = { 0, 0, 0 };
-	image.init(viewport.width, viewport.width);//viewport.width, viewport.height);
+	image.init(viewport.width, viewport.width);
 	for (int i = 0; i < viewport.height; i++)
 	{
 		for (int j = 0; j < viewport.width; j++)
