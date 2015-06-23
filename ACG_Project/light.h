@@ -2,16 +2,16 @@
 #define _LIGHT_H
 
 #include "algebra3.h"
+#include "geometry.h"
 
-class Light
+class Light: public Sphere
 {
 public:
-	vec3 position;
-	vec3 color;
-	void setLight(vec3 position, vec3 color)
+	void setLight(vec3 center, float radius, Material material)
 	{
-		this->position = position;
-		this->color = color;
+		this->center = center;
+		this->radius = radius;
+		this->material = material;
 	}
 };
 

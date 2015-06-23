@@ -12,6 +12,7 @@ public:
 	float radius;
 	vec3 center;
 	Material material;
+	Sphere() {}
 	Sphere(float x, float y, float z, float radius, Material material)
 	{
 		center.set(x, y, z);
@@ -31,14 +32,6 @@ class Plane
 {
 public:
 	vec3 vertices[4];
-	Material material;
-};
-
-class CheckerBoard
-{
-public:
-	vec3 vertices[4];
-	int alternations;
 	Material material;
 };
 

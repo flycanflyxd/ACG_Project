@@ -4,7 +4,7 @@
 
 using namespace std;
 
-bool init(Camera &camera, Viewport &viewport, Light &light, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes, CheckerBoard &checkerboard)
+bool init(Camera &camera, Viewport &viewport, Light &light, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
 {
 	char type;
 	float input[10];
@@ -12,7 +12,8 @@ bool init(Camera &camera, Viewport &viewport, Light &light, vector<Sphere> &sphe
 	Triangle triangle;
 	Plane plane;
 	Material material;
-	float angle = 360 / camera.CAMERA_NUM;
+	vec3 position;
+	float radius;
 
 	ifstream fin("input.txt");
 	if (!fin)
@@ -23,17 +24,14 @@ bool init(Camera &camera, Viewport &viewport, Light &light, vector<Sphere> &sphe
 		switch (type)
 		{
 		case 'E':
-			fin >> camera.position[0][0] >> camera.position[0][1] >> camera.position[0][2];
+			fin >> camera.position[0] >> camera.position[1] >> camera.position[2];
 			break;
 		case 'V':
 			fin >> camera.direction[0] >> camera.direction[1] >> camera.direction[2];
-			for (int i = 0; i < camera.CAMERA_NUM - 1; i++)
-			{
-				camera.position[i + 1] = camera.position[0] + rotation3D(camera.direction, angle * i) * vec3(0.0, camera.aperture / 2, 0.0);
-			}
+			camera.direction.normalize();
 			break;
 		case 'F':
-			fin >> camera.horizontalFOV >> camera.verticalFOV;
+			fin >> camera.FOV;
 			break;
 		case 'R':
 			fin >> viewport.width;
@@ -68,24 +66,32 @@ bool init(Camera &camera, Viewport &viewport, Light &light, vector<Sphere> &sphe
 			planes.push_back(plane);
 			break;
 		case 'L':
-			for (int i = 0; i < 6; i++)
-				fin >> input[i];
-			light.setLight(vec3(input[0], input[1], input[2])/*position*/, vec3(input[3], input[4], input[5])/*color*/);
+			for (int i = 0; i < 3; i++)
+			{
+				fin >> position[i];
+			}
+			fin >> radius;
+			for (int i = 0; i < 3; i++)
+			{
+				fin >> material.color[i];
+			}
+			material.color /= 255;
+			for (int i = 0; i < 2; i++)
+			{
+				fin >> material.solidAngle[i];
+			}
+			light.setLight(position, radius, material);
 			break;
 		case 'M':
-			for (int i = 0; i < 10; i++)
-				fin >> input[i];
-			material.setMaterial(vec3(input[0], input[1], input[2]), input[3], input[4], input[5], input[6], input[7], input[8], input[9]);
-			break;
-		case 'C':
-			for (int i = 0; i < 4; i++)
+			for (int i = 0; i < 3; i++)
 			{
-				for (int j = 0; j < 3; j++)
-					fin >> input[j];
-				checkerboard.vertices[i].set(input[0], input[1], input[2]);
+				fin >> material.color[i];
 			}
-			fin >> input[0];
-			checkerboard.alternations = input[0];
+			material.color /= 255;
+			for (int i = 0; i < 2; i++)
+			{
+				fin >> material.solidAngle[i];
+			}
 			break;
 		default:
 			//return false;
@@ -96,35 +102,35 @@ bool init(Camera &camera, Viewport &viewport, Light &light, vector<Sphere> &sphe
 	return true;
 }
 
-Intersection PhongShading(vec3 startPosition, Intersection intersection, Light light)
-{
-	Material material = intersection.material;
-	float Ka = material.Ka, Kd = material.Kd, Ks = material.Ks;
-	// Ambient
-	vec3 ambient = Ka * light.color;
-	ambient = prod(ambient / 255, material.color / 255);
 
-	// Diffuse
-	vec3 lightDirection = (light.position - intersection.position).normalize();
-	vec3 diffuse = MAX(intersection.normal * lightDirection, 0.0) * light.color;
-	diffuse = Kd * prod(diffuse / 255, material.color / 255);
-
-	// Specular
-	vec3 specular;
-	int exp = material.exp;
-	vec3 viewDirection = (startPosition - intersection.position).normalize();
-	vec3 H = (lightDirection + viewDirection).normalize();
-	specular = Ks * light.color / 255 * pow(MAX(intersection.normal * H, 0.0), exp);
-	intersection.material.color = ambient + diffuse + specular;
-	return intersection;
-}
-
-Intersection rayTracer(vec3 startPosition, vec3 ray, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
+Intersection rayTracer(vec3 startPosition, vec3 ray, Light light, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
 {
 	vec3 v1, v2, normal;
 	vec3 intersectPosition;
 	Intersection intersection;
 	float a = 0, b = 0, c = 0, t = 0, d = 0;
+	//light
+	a = 1; //a = nx^2 + ny^2 + nz^2 = 1 cuz it's normalized
+	for (int k = 0; k < 3; k++)
+	{
+		b += 2 * ray[k] * (startPosition[k] - light.center[k]);
+		c += pow(startPosition[k] - light.center[k], 2);
+	}
+	c -= pow(light.radius, 2);
+	if (pow(b, 2) - 4 * a * c >= 0)
+	{
+		t = (-b - sqrt(pow(b, 2) - 4 * a * c)) / (2 * a);
+		if (t < intersection.t && t > 0)
+		{
+			intersection.type = 'l';
+			//intersection.index = nSphere;
+			intersection.t = t;
+			intersection.position = startPosition + ray * t;
+			intersection.normal = (intersection.position - light.center).normalize();
+			intersection.material = light.material;
+		}
+	}
+	a = b = c = 0;
 	// Sphere
 	for (int nSphere = 0; nSphere < spheres.size(); nSphere++)
 	{
@@ -210,7 +216,7 @@ Intersection rayTracer(vec3 startPosition, vec3 ray, vector<Sphere> &spheres, ve
 	return intersection;
 }
 
-Intersection shadow(Intersection point, Light light, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes, CheckerBoard &checkerboard)
+/*Intersection shadow(Intersection point, Light light, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes, CheckerBoard &checkerboard)
 {
 	vec3 ray = (point.position - light.position).normalize();
 	Intersection intersection;
@@ -218,7 +224,7 @@ Intersection shadow(Intersection point, Light light, vector<Sphere> &spheres, ve
 	if ((intersection.position - light.position).length() < (point.position - light.position).length() && !(intersection.type == point.type && intersection.index == point.index))
 		point.material.color.set(0, 0, 0);
 	return point;
-}
+}*/
 
 /*vec3 Reflection_Refraction(Camera &camera, Light &light, vec3 ray, Intersection point, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes, CheckerBoard &checkerboard)
 {
@@ -274,59 +280,50 @@ Intersection shadow(Intersection point, Light light, vector<Sphere> &spheres, ve
 	return vec3(1, 1, 1);
 }*/
 
-vec3 draw(Camera &camera, vec3 ray[], Light light, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes, CheckerBoard &checkerboard)
+vec3 draw(Camera &camera, vec3 ray, Light light, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
 {
-	const int NUM_INTERSECTION = camera.CAMERA_NUM;
-	Intersection intersection[NUM_INTERSECTION];
-	vec3 rColor = vec3(0.0, 0.0, 0.0);
-	for (int i = 0; i < camera.CAMERA_NUM; i++)
+	Intersection intersection;
+	vec3 rColor = vec3(0.55, 0.55, 0.55);
+	intersection = rayTracer(camera.position, ray, light, spheres, triangles, planes);
+	if (intersection.t != numeric_limits<float>::max())
 	{
-		intersection[i] = rayTracer(camera.position[i], ray[i], spheres, triangles, planes);
-		if (intersection[i].t != numeric_limits<float>::max())
-		{
-			if (shadow(intersection[i], light, spheres, triangles, planes, checkerboard).material.color == vec3(0.0, 0.0, 0.0))
-				continue;
-			rColor += PhongShading(camera.position[i], intersection[i], light).material.color;
-		}
+		//if (shadow(intersection[i], light, spheres, triangles, planes).material.color == vec3(0.0, 0.0, 0.0))
+		rColor = intersection.material.color;
 	}
 	
-	return rColor / camera.CAMERA_NUM;
+	return rColor;
 }
 
-void rayTracing(Camera &camera, Viewport &viewport, Light light, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes, CheckerBoard &checkerboard)
+void rayTracing(Camera &camera, Viewport &viewport, Light light, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
 {
 	//calculate the center position of the viewport
 	float t;
 	t = sqrt(pow(viewport.distance, 2) / (pow(camera.direction[0], 2) + pow(camera.direction[1], 2) + pow(camera.direction[2], 2)));
-	vec3 planeCenter = camera.position[0] + camera.direction * t;
+	vec3 planeCenter = camera.position + camera.direction * t;
 	//viewport plane nx * x + ny * y + nz * z = d
 	float d = camera.direction[0] * planeCenter[0] + camera.direction[1] * planeCenter[1] + camera.direction[2] * planeCenter[2];
 	vec3 vDownCenter = camera.direction, vLeftCenter = camera.direction;
 	//find the vectors of camera to down center edge and left center edge
-	vDownCenter = rotation3D(vec3(0.0, 1.0, 0.0) ^ camera.direction, camera.verticalFOV / 2) * vDownCenter;
-	vLeftCenter = rotation3D(vec3(0.0, 1.0, 0.0), camera.horizontalFOV / 2) * vLeftCenter;
+	vDownCenter = rotation3D(vec3(0.0, 1.0, 0.0) ^ camera.direction, camera.FOV / 2) * vDownCenter;
+	vLeftCenter = rotation3D(camera.direction ^ vec3(0.0, 1.0, 0.0) ^ camera.direction, camera.FOV / 2) * vLeftCenter;
 	vec3 downCenter;
-	t = (d - (camera.direction[0] * camera.position[0][0] + camera.direction[1] * camera.position[0][1] + camera.direction[2] * camera.position[0][2]))
+	t = (d - (camera.direction[0] * camera.position[0] + camera.direction[1] * camera.position[1] + camera.direction[2] * camera.position[2]))
 		/ (camera.direction[0] * vDownCenter[0] + camera.direction[1] * vDownCenter[1] + camera.direction[2] * vDownCenter[2]);
-	downCenter = camera.position[0] + vDownCenter * t;
+	downCenter = camera.position + vDownCenter * t;
 	vec3 leftCenter;
-	t = (d - (camera.direction[0] * camera.position[0][0] + camera.direction[1] * camera.position[0][1] + camera.direction[2] * camera.position[0][2]))
+	t = (d - (camera.direction[0] * camera.position[0] + camera.direction[1] * camera.position[1] + camera.direction[2] * camera.position[2]))
 		/ (camera.direction[0] * vLeftCenter[0] + camera.direction[1] * vLeftCenter[1] + camera.direction[2] * vLeftCenter[2]);
-	leftCenter = camera.position[0] + vLeftCenter * t;
+	leftCenter = camera.position + vLeftCenter * t;
 	viewport.startPosition = planeCenter - downCenter + leftCenter;
 	viewport.vectorWidth = (planeCenter - leftCenter) / (viewport.width * 0.5);
 	viewport.vectorHeight = (downCenter - planeCenter) / (viewport.height * 0.5);
-	const int RAY_NUM = camera.CAMERA_NUM;
-	vec3 ray[RAY_NUM];
+	vec3 ray;
 	for (int i = 0; i < viewport.height; i++)
 	{
 		for (int j = 0; j < viewport.width; j++)
 		{
-			for (int k = 0; k < RAY_NUM; k++)
-			{
-				ray[k] = (viewport.startPosition + i * viewport.vectorHeight + j * viewport.vectorWidth - camera.position[k]).normalize();// normalize the vector
-			}
-			viewport.pixel[i][j] = draw(camera, ray, light, spheres, triangles, planes, checkerboard);
+			ray = (viewport.startPosition + i * viewport.vectorHeight + j * viewport.vectorWidth - camera.position).normalize();// normalize the vector
+			viewport.pixel[i][j] = draw(camera, ray, light, spheres, triangles, planes);
 		}
 	}
 }

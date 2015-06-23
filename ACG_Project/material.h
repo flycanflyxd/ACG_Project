@@ -7,19 +7,14 @@ class Material
 {
 public:
 	vec3 color;
-	float Ka, Kd, Ks;
-	int exp;
-	float Reflact, Refract, Nr;
-	void setMaterial(vec3 color, float Ka, float Kd, float Ks, int exp, float Reflact, float Refract, float Nr)
+	float solidAngle[2];
+	void setMaterial(vec3 color, float solidAngle[])
 	{
 		this->color = color;
-		this->Ka = Ka;
-		this->Kd = Kd;
-		this->Ks = Ks;
-		this->exp = exp;
-		this->Reflact = Reflact;
-		this->Refract = Refract;
-		this->Nr = Nr;
+		for (int i = 0; i < 2; i++)
+		{
+			this->solidAngle[i] = solidAngle[i];
+		}
 	}
 };
 

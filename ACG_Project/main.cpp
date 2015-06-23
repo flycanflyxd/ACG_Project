@@ -12,14 +12,13 @@ int main()
 	vector<Sphere> spheres;
 	vector<Triangle> triangles;
 	vector<Plane> planes;
-	CheckerBoard checkerboard;
-	if (!init(camera, viewport, light, spheres, triangles, planes, checkerboard))
+	if (!init(camera, viewport, light, spheres, triangles, planes))
 	{
 		cerr << "Cannot read input file" << endl;
 		system("pause");
 		return 1;
 	}
-	rayTracing(camera, viewport, light, spheres, triangles, planes, checkerboard);
+	rayTracing(camera, viewport, light, spheres, triangles, planes);
 	output(viewport);
 	cout << "Time used: " << static_cast<double>(clock()) / CLK_TCK << endl;
 	system("pause");
