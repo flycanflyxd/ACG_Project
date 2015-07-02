@@ -7,8 +7,8 @@ class Material
 {
 public:
 	vec3 color;
-	float solidAngle[2];
-	void setMaterial(vec3 color, float solidAngle[])
+	int solidAngle[2];
+	void setMaterial(vec3 color, int solidAngle[])
 	{
 		this->color = color;
 		for (int i = 0; i < 2; i++)
