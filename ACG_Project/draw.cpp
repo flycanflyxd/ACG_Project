@@ -233,89 +233,91 @@ Intersection rayTracer(vec3 startPosition, vec3 ray, vector<Light> lights, vecto
 	return point;
 }*/
 
-/*vec3 Reflection_Refraction(Camera &camera, Light &light, vec3 ray, Intersection point, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes, CheckerBoard &checkerboard)
-{
-	static int counter = 0;
-	counter++;
-	Intersection intersection;
-	// Reflaction
-	if (point.material.Reflact > 0)
-	{
-		vec3 reflectDir = (ray - 2 * ray * point.normal * point.normal).normalize();
-		intersection = rayTracer(point.position, reflectDir, spheres, triangles, planes);
-		if (intersection.t != numeric_limits<float>::max())
-		{
-			intersection = shadow(intersection, light, spheres, triangles, planes, checkerboard);
-			intersection = PhongShading(camera, intersection, light);
-			if (counter == 3)
-			{
-				counter = 0;
-				return intersection.material.color;
-			}
-			return intersection.material.color + intersection.material.Reflact * Reflection_Refraction(camera, light, reflectDir, intersection, spheres, triangles, planes, checkerboard);
-		}
-	}
-	// Refraction
-	if (point.material.Refract > 0)
-	{
-		Intersection in, out;
-		float cosI = -(point.normal * ray);
-		float sinT2 = pow(1 / point.material.Nr, 2) * (1.0 - pow(cosI, 2));
-		if (sinT2 > 1.0)
-			return vec3(0, 0, 0);
-		float cosT = sqrt(1.0 - sinT2);
-		vec3 refractDir = (1 / point.material.Nr * ray + (1 / point.material.Nr * cosI - cosT) * point.normal).normalize();// the ray go into the sphere
-		in = rayTracer(point.position, refractDir, spheres, triangles, planes);// the intersection in the sphere
-		cosI = -(-in.normal * refractDir);
-		sinT2 = pow(in.material.Nr, 2) * (1.0 - pow(cosI, 2));
-		cosT = sqrt(1.0 - sinT2);
-		refractDir = (in.material.Nr * refractDir + (in.material.Nr * cosI - cosT) * -in.normal).normalize();// the reay go out the sphere
-		out = rayTracer(in.position, refractDir, spheres, triangles, planes);
-		if (out.t != numeric_limits<float>::max())
-		{
-			out = shadow(out, light, spheres, triangles, planes, checkerboard);
-			out = PhongShading(camera, out, light);
-			if (counter == 3)
-			{
-				counter = 0;
-				return out.material.color;
-			}
-			return out.material.color;// + out.material.Refract * Reflection_Refraction(camera, light, refractDir, intersection, spheres, triangles, planes, checkerboard);
-		}
-	}
-	counter = 0;
-	return vec3(1, 1, 1);
-}*/
-
-vec3 SamplingBSDF(Camera camera, vector<Light> lights, Intersection intersection, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
+vec3 samplingBSDF(Camera camera, vector<Light> lights, Intersection intersection, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
 {
 	vec3 reflectRay, ray, normal = -intersection.normal /* Inverse the normal */, rColor;
 	reflectRay = (rotation3D(normal, 180) * (camera.position - intersection.position)).normalize();
 	ray = reflectRay;
 	Intersection sample;
 	float theta, phi, attenuation;
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < 4; i++)
 	{
 		theta = rand() % intersection.material.solidAngle[0] - intersection.material.solidAngle[0] / 2;
 		phi = rand() % intersection.material.solidAngle[1] - intersection.material.solidAngle[1] / 2;
 		ray = rotation3D(planes[intersection.index].vertices[1] - planes[intersection.index].vertices[0], theta) * ray;
 		ray = rotation3D(reflectRay, phi) * ray;
 		ray.normalize();
-		attenuation = pow(cos(theta / 180 * M_PI), 200);
+		attenuation = cos(theta / 180 * M_PI) * cos(phi / 180 * M_PI);
 		sample = rayTracer(intersection.position, ray, lights, spheres, triangles, planes);
 		if (sample.type == 'l' && sample.t != numeric_limits<float>::max())
 		{
-				rColor += sample.material.color * attenuation;
+			rColor += sample.material.color * attenuation;
 		}
 		else
 		{
 			rColor += intersection.material.color;
 		}
 	}
-	return rColor / 2;
+	return rColor / 4;
 }
 
-vec3 draw(Camera &camera, vec3 ray, vector<Light> lights, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
+vec3 samplingLightSource(Camera camera, vector<Light> lights, Intersection intersection, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
+{
+	vec3 reflectRay, ray, normal = -intersection.normal /* Inverse the normal */, rColor = intersection.material.color, projectReflectRayYZ, projectRayYZ, projectReflectRayXZ, projectRayXZ;
+	Intersection lightSource;
+	float theta, phi, attenuation;
+	for (int i = 0; i < lights.size(); i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			theta = rand() % 180;
+			theta = theta / 180 * M_PI;
+			phi = rand() % 360;
+			phi = phi / 180 * M_PI;
+			ray = vec3(lights[i].radius * sin(theta) * cos(phi), lights[i].radius * sin(theta) * sin(phi), lights[i].radius * cos(theta));
+			lightSource.position = lights[i].center + ray;
+			lightSource.type = 'l';
+			lightSource.index = i;
+			lightSource.normal = ray.normalize();
+			lightSource.material = lights[i].material;
+			reflectRay = rotation3D(normal, 180) * (lightSource.position - intersection.position).normalize();
+			ray = (camera.position - intersection.position).normalize();
+			projectReflectRayYZ = reflectRay; // Project on yz-plane
+			projectReflectRayYZ[0] = 0;
+			projectReflectRayYZ.normalize();
+			projectRayYZ = ray; // Project on yz-plane
+			projectRayYZ[0] = 0;
+			projectRayYZ.normalize();
+			projectReflectRayXZ = reflectRay; // Project on xz-plane
+			projectReflectRayXZ[1] = 0;
+			projectReflectRayXZ.normalize();
+			projectRayXZ = ray; // Project on xz-plane
+			projectRayXZ[1] = 0;
+			projectRayXZ.normalize();
+			/*cout << acos(projectReflectRayYZ * projectRayYZ) * 180 / M_PI << " " << acos(projectReflectRayXZ * projectRayXZ) * 180 / M_PI << endl;
+			cout << intersection.material.solidAngle[1] / 15;
+			system("pause");*/
+			if ((acos(projectReflectRayYZ * projectRayYZ) * 180 / M_PI < intersection.material.solidAngle[0] / 1.5)
+				&& acos(projectReflectRayXZ * projectRayXZ) * 180 / M_PI < intersection.material.solidAngle[0] / 1.5)
+			{
+				attenuation = pow((projectReflectRayYZ * projectRayYZ) * (projectReflectRayXZ * projectRayXZ), 250);
+				//if (attenuation < 0.6) system("pause");
+				//cout << projectReflectRayYZ * projectRayYZ << " " << projectReflectRayXZ * projectRayXZ << " " << attenuation << endl;
+				if (((rColor + lightSource.material.color * attenuation) / 2).length() > intersection.material.color.length())
+				{
+					rColor = (rColor + lightSource.material.color * attenuation) / 2;
+				}
+			}
+			else
+			{
+				continue;//rColor += intersection.material.color;
+			}
+		}
+	}
+	return rColor;// / (4 * lights.size());
+}
+
+vec3 draw(int sampling, Camera &camera, vec3 ray, vector<Light> lights, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
 {
 	Intersection intersection;
 	vec3 rColor = vec3(0, 0, 0);
@@ -326,18 +328,20 @@ vec3 draw(Camera &camera, vec3 ray, vector<Light> lights, vector<Sphere> &sphere
 		rColor = intersection.material.color;
 		if (intersection.type == 'p')
 		{
-			rColor = SamplingBSDF(camera, lights, intersection, spheres, triangles, planes);
+			if (sampling == 0)
+			{
+				rColor = samplingBSDF(camera, lights, intersection, spheres, triangles, planes);
+			}
+			else
+			{
+				rColor = samplingLightSource(camera, lights, intersection, spheres, triangles, planes);
+			}
 		}
-		/*if (intersection.type == 'l')
-		{
-			rColor = samplingLightSource(lights, intersection, spheres, triangles, planes);
-		}*/
 	}
-	
 	return rColor;
 }
 
-void rayTracing(Camera &camera, Viewport &viewport, vector<Light> lights, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
+void rayTracing(int sampling, Camera &camera, Viewport &viewport, vector<Light> lights, vector<Sphere> &spheres, vector<Triangle> &triangles, vector<Plane> &planes)
 {
 	//calculate the center position of the viewport
 	float t;
@@ -366,12 +370,12 @@ void rayTracing(Camera &camera, Viewport &viewport, vector<Light> lights, vector
 		for (int j = 0; j < viewport.width; j++)
 		{
 			ray = (viewport.startPosition + i * viewport.vectorHeight + j * viewport.vectorWidth - camera.position).normalize();// normalize the vector
-			viewport.pixel[i][j] = draw(camera, ray, lights, spheres, triangles, planes);
+			viewport.pixel[i][j] = draw(sampling, camera, ray, lights, spheres, triangles, planes);
 		}
 	}
 }
 
-void output(Viewport &viewport)
+void output(int sampling, string outputFileName[], Viewport &viewport)
 {
 	ColorImage image;
 	Pixel p = { 0, 0, 0 };
@@ -394,5 +398,5 @@ void output(Viewport &viewport)
 			image.writePixel(j, i, p);
 		}
 	}
-	image.outputPPM("rayTracing.ppm");
+	image.outputPPM(const_cast<char*>((outputFileName[sampling] + ".ppm").c_str()));
 }

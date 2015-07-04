@@ -12,14 +12,18 @@ int main()
 	vector<Sphere> spheres;
 	vector<Triangle> triangles;
 	vector<Plane> planes;
+	string outputFileName[] = { "SamplingBSDF", "SamplingLightSource" };
 	if (!init(camera, viewport, lights, spheres, triangles, planes))
 	{
 		cerr << "Cannot read input file" << endl;
 		system("pause");
 		return 1;
 	}
-	rayTracing(camera, viewport, lights, spheres, triangles, planes);
-	output(viewport);
+	for (int sampling = 0; sampling < 2; sampling++)
+	{
+		rayTracing(sampling, camera, viewport, lights, spheres, triangles, planes);
+		output(sampling, outputFileName, viewport);
+	}
 	cout << "Time used: " << static_cast<double>(clock()) / CLK_TCK << endl;
 	system("pause");
 	return 0;
